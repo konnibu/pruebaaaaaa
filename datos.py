@@ -1,13 +1,7 @@
-# -*- coding: utf-8 -*-
-"""datos
-
-Aplicación Streamlit para analizar datos de países.
-
-"""
-
 import requests
 import pandas as pd
 import streamlit as st
+from io import BytesIO
 
 def obtener_datos_paises():
     url = 'https://restcountries.com/v3.1/all'
@@ -28,7 +22,7 @@ def convertir_a_dataframe(paises):
             'Población Total': pais.get('population', 0),
             'Área en km²': pais.get('area', 0),
             'Número de Fronteras': len(pais.get('borders', [])),
-            'Número de Idiomas Oficiales': len(pais.get('languages', {})),
+            'Número de Idiomas Oficiales': len(pais.get('languages', {})) if pais.get('languages') else 0,
             'Número de Zonas Horarias': len(pais.get('timezones', []))
         })
     return pd.DataFrame(datos)
@@ -69,13 +63,19 @@ df_filtrado = df[df['Población Total'] >= valor_filtro]
 st.write('Datos filtrados:')
 st.write(df_filtrado)
 
-# Descargar datos filtrados
-if st.button('Descargar datos filtrados'):
+# Función para descargar datos como Excel o CSV
+def download_data(df_filtrado):
     # Descargar como CSV
     csv = df_filtrado.to_csv(index=False).encode('utf-8')
     st.download_button('Descargar CSV', csv, 'datos_filtrados.csv', 'text/csv')
 
     # Descargar como Excel
-    excel = df_filtrado.to_excel(index=False, engine='openpyxl')
-    excel_buffer = excel.encode('utf-8')  # Asegúrate de que el archivo esté en formato correcto
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        df_filtrado.to_excel(writer, index=False, sheet_name='Datos')
+    excel_buffer.seek(0)
     st.download_button('Descargar Excel', excel_buffer, 'datos_filtrados.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+# Descargar datos filtrados
+if st.button('Descargar datos filtrados'):
+    download_data(df_filtrado)
