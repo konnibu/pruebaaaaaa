@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import streamlit as st
+from io import BytesIO  # Asegúrate de importar BytesIO
 from time import sleep
 
 def obtener_datos_paises():
@@ -88,4 +89,3 @@ if paises:
 
 else:
     st.warning('No se pudieron obtener los datos de los países.')
-
