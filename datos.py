@@ -2,10 +2,12 @@ import requests
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
-import io
+import folium
+from streamlit_folium import st_folium
 
+# Función para obtener datos de países
 def obtener_datos_paises():
-    url = 'https://restcountries.com/v3.1/all'
+    url = 'https://raw.githubusercontent.com/jxnscv/Programacion/main/all.json'
     respuesta = requests.get(url)
     if respuesta.status_code == 200:
         return respuesta.json()
@@ -13,6 +15,7 @@ def obtener_datos_paises():
         st.error(f'Error: {respuesta.status_code}')
         return []
 
+# Función para convertir los datos a DataFrame
 def convertir_a_dataframe(paises):
     datos = []
     for pais in paises:
@@ -23,82 +26,118 @@ def convertir_a_dataframe(paises):
             'Área en km²': pais.get('area', 0),
             'Número de Fronteras': len(pais.get('borders', [])),
             'Número de Idiomas Oficiales': len(pais.get('languages', {})),
-            'Número de Zonas Horarias': len(pais.get('timezones', []))
+            'Número de Zonas Horarias': len(pais.get('timezones', [])),
+            'Latitud': pais.get('latlng', [0])[0],
+            'Longitud': pais.get('latlng', [0])[1]
         })
     return pd.DataFrame(datos)
 
-
+# Procesamiento de datos
 paises = obtener_datos_paises()
 df = convertir_a_dataframe(paises)
 
+# Configuración de Streamlit
 st.title('Análisis de Datos de Países')
+st.write('Este proyecto analiza diversos datos sobre países, incluyendo población, área, fronteras, idiomas y zonas horarias.')
 
-st.sidebar.title("Navegación")
-pagina = st.sidebar.radio("Selecciona una página", ["Descripción", "Interacción con Datos", "Gráficos Interactivos"])
+# Mostrar datos originales
+if st.checkbox('Mostrar datos originales'):
+    st.write(df)
 
-if pagina == "Descripción":
-    st.title("Descripción del Proyecto")
-    st.write("""
-    Esta aplicación web utiliza datos de la API [REST Countries](https://restcountries.com/v3.1/all).
-    Permite explorar información sobre países, incluyendo su población, área, idiomas, fronteras y más.
-    La aplicación está dividida en tres secciones principales:
-    - **Descripción**: Información sobre el proyecto y la fuente de datos.
-    - **Interacción con Datos**: Visualiza y filtra los datos obtenidos.
-    - **Gráficos Interactivos**: Crea gráficos dinámicos basados en los datos.
-    """)
+# Estadísticas de columnas seleccionadas
+columna_estadisticas = st.selectbox('Selecciona una columna para calcular estadísticas', df.columns[2:])
+if columna_estadisticas:
+    media = df[columna_estadisticas].mean()
+    mediana = df[columna_estadisticas].median()
+    desviacion_estandar = df[columna_estadisticas].std()
+    st.write(f'Media: {media}')
+    st.write(f'Mediana: {mediana}')
+    st.write(f'Desviación Estándar: {desviacion_estandar}')
 
-elif pagina == "Interacción con Datos":
-    st.title("Interacción con Datos")
-    st.subheader("Datos Originales")
-    if st.checkbox('Mostrar datos originales'):
-        st.dataframe(df)
+# Ordenar por columna
+columna_ordenar = st.selectbox('Selecciona una columna para ordenar', df.columns)
+orden = st.radio('Selecciona el orden', ('Ascendente', 'Descendente'))
+if columna_ordenar:
+    df_ordenado = df.sort_values(by=columna_ordenar, ascending=(orden == 'Ascendente'))
+    st.write(df_ordenado)
 
-    st.subheader("Estadísticas")
-    columna_estadisticas = st.selectbox("Selecciona una columna numérica para calcular estadísticas", ["Población Total", "Área en km²"])
-    if columna_estadisticas:
-        st.write(f"**Media**: {df[columna_estadisticas].mean():,.2f}")
-        st.write(f"**Mediana**: {df[columna_estadisticas].median():,.2f}")
-        st.write(f"**Desviación Estándar**: {df[columna_estadisticas].std():,.2f}")
+# Filtrar por población total
+valor_filtro = st.slider('Selecciona un valor para filtrar la población total', 0, int(df['Población Total'].max()), 100000)
+df_filtrado = df[df['Población Total'] >= valor_filtro]
+st.write('Datos filtrados:')
+st.write(df_filtrado)
 
-    st.subheader("Ordenar Datos")
-    columna_ordenar = st.selectbox("Selecciona una columna para ordenar", df.columns)
-    orden = st.radio("Orden", ["Ascendente", "Descendente"])
-    if columna_ordenar:
-        df_ordenado = df.sort_values(by=columna_ordenar, ascending=(orden == "Ascendente"))
-        st.dataframe(df_ordenado)
+# Botón para descargar datos filtrados
+if st.button('Descargar datos filtrados'):
+    csv = df_filtrado.to_csv(index=False)
+    st.download_button('Descargar CSV', csv, 'datos_filtrados.csv', 'text/csv')
 
-    st.subheader("Filtrar por Población")
-    valor_filtro = st.slider("Selecciona un valor para filtrar la población total", 0, int(df["Población Total"].max()), 100000)
-    rango_min, rango_max = st.slider("Selecciona un rango de población", int(df["Población Total"].min()), int(df["Población Total"].max()), (0, int(df["Población Total"].max())))
-    df_filtrado = df[(df["Población Total"] >= rango_min) & (df["Población Total"] <= rango_max)]
-    st.dataframe(df_filtrado)
+# Gráficos de análisis
+st.subheader('Gráfico Personalizado')
 
-    if st.button('Descargar datos filtrados'):
-        csv = df_filtrado.to_csv(index=False)
-        st.download_button('Descargar CSV', csv, 'datos_filtrados.csv', 'text/csv')
+# Selección del tipo de gráfico
+tipo_grafico = st.selectbox('Selecciona el tipo de gráfico', ['Barras', 'Líneas', 'Dispersión'])
 
-elif pagina == "Gráficos Interactivos":
-    st.title("Gráficos Interactivos")
-    st.subheader("Configurar Gráfico")
-    x_var = st.selectbox("Eje X", ["Población Total", "Área en km²", "Número de Fronteras", "Número de Idiomas Oficiales", "Número de Zonas Horarias"])
-    y_var = st.selectbox("Eje Y", ["Población Total", "Área en km²", "Número de Fronteras", "Número de Idiomas Oficiales", "Número de Zonas Horarias"])
-    tipo_grafico = st.selectbox("Tipo de Gráfico", ["Dispersión", "Línea", "Barras"])
+# Selección de ejes
+eje_x = st.selectbox('Selecciona la variable para el eje X', df.columns[2:], key='grafico_x')
+eje_y = st.selectbox('Selecciona la variable para el eje Y', df.columns[2:], key='grafico_y')
 
-    fig, ax = plt.subplots()
-    if tipo_grafico == "Dispersión":
-        ax.scatter(df[x_var], df[y_var], alpha=0.7)
-    elif tipo_grafico == "Línea":
-        ax.plot(df[x_var], df[y_var], marker='o')
-    elif tipo_grafico == "Barras":
-        ax.bar(df[x_var], df[y_var])
+# Rango para los ejes
+if eje_x and eje_y:
+    min_x, max_x = st.slider(f'Selecciona el rango para {eje_x}', 
+                             float(df[eje_x].min()), 
+                             float(df[eje_x].max()), 
+                             (float(df[eje_x].min()), float(df[eje_x].max())), key='rango_x')
+    
+    min_y, max_y = st.slider(f'Selecciona el rango para {eje_y}', 
+                             float(df[eje_y].min()), 
+                             float(df[eje_y].max()), 
+                             (float(df[eje_y].min()), float(df[eje_y].max())), key='rango_y')
+    
+    # Filtrar los datos según el rango seleccionado
+    df_filtrado = df[(df[eje_x] >= min_x) & (df[eje_x] <= max_x) &
+                     (df[eje_y] >= min_y) & (df[eje_y] <= max_y)]
+    
+    # Creación del gráfico
+    plt.figure(figsize=(10, 5))
+    if tipo_grafico == 'Barras':
+        df_filtrado.groupby(eje_x)[eje_y].sum().plot(kind='bar', color='lightcoral')
+    elif tipo_grafico == 'Líneas':
+        plt.plot(df_filtrado[eje_x], df_filtrado[eje_y], color='blue', alpha=0.7)
+    elif tipo_grafico == 'Dispersión':
+        plt.scatter(df_filtrado[eje_x], df_filtrado[eje_y], color='green', alpha=0.5)
+    
+    # Personalización del gráfico
+    plt.title(f'{eje_y} vs {eje_x}', fontsize=16)
+    plt.xlabel(eje_x, fontsize=12)
+    plt.ylabel(eje_y, fontsize=12)
+    plt.xticks(rotation=45)
+    st.pyplot(plt)
+    plt.close()
 
-    ax.set_xlabel(x_var)
-    ax.set_ylabel(y_var)
-    ax.set_title(f"{tipo_grafico} entre {x_var} y {y_var}")
-    st.pyplot(fig)
+# Mapa interactivo
+st.subheader('Mapa Interactivo')
+min_poblacion_mapa, max_poblacion_mapa = st.slider(
+    'Selecciona el rango de población para mostrar en el mapa',
+    int(df['Población Total'].min()), 
+    int(df['Población Total'].max()), 
+    (int(df['Población Total'].min()), int(df['Población Total'].max()))
+)
 
-    buffer = io.BytesIO()
-    fig.savefig(buffer, format="png")
-    buffer.seek(0)
-    st.download_button("Descargar Gráfico", buffer, file_name="grafico.png")
+df_filtrado_mapa = df[(df['Población Total'] >= min_poblacion_mapa) & 
+                      (df['Población Total'] <= max_poblacion_mapa)]
 
+mapa = folium.Map(location=[20, 0], zoom_start=2)
+for _, row in df_filtrado_mapa.iterrows():
+    popup_info = (
+        f"<strong>Nombre Común:</strong> {row['Nombre Común']}<br>"
+        f"<strong>Región Geográfica:</strong> {row['Región Geográfica']}<br>"
+        f"<strong>Población Total:</strong> {row['Población Total']}<br>"
+        f"<strong>Área en km²:</strong> {row['Área en km²']}<br>"
+    )
+    folium.Marker(
+        location=[row['Latitud'], row['Longitud']],
+        popup=popup_info,
+        icon=folium.Icon(color='blue')
+    ).add_to(mapa)
+st_folium(mapa, width=700, height=500)
